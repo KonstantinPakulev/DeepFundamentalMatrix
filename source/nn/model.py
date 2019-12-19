@@ -64,7 +64,7 @@ class WeightEstimatorNet(nn.Module):
     def __init__(self, input_size):
         super(WeightEstimatorNet, self).__init__()
 
-        self.model = nn.Sequential(
+        self.estimator = nn.Sequential(
             nn.Conv1d(input_size, 64, kernel_size=1),
             nn.InstanceNorm1d(64, affine=True),
             nn.LeakyReLU(),
@@ -91,7 +91,7 @@ class WeightEstimatorNet(nn.Module):
         )
 
     def forward(self, x):
-        return self.model(x).squeeze(1)
+        return self.estimator(x).squeeze(1)
 
 
 class NormalizedEightPointNet(nn.Module):
@@ -100,25 +100,24 @@ class NormalizedEightPointNet(nn.Module):
         super(NormalizedEightPointNet, self).__init__()
         self.num_iter = num_iter
 
-        self.model = ModelEstimator()
+        self.estimator = ModelEstimator()
 
-        self.weights_init = WeightEstimatorNet(7)
-        self.weights_iter = WeightEstimatorNet(9)
+        self.weights_init = WeightEstimatorNet(4)
+        self.weights_iter = WeightEstimatorNet(6)
 
     def forward(self, kp1, kp2, additional_info):
         """
         :param kp1: B x N x 2
         :param kp2: B x N x 2
-        :param additional_info: B x N x 3
         """
         # Normalize points to range [-1, 1]
         kp1, norm_transform1 = normalize_points(to_homogeneous_coordinates(kp1))
         kp2, norm_transform2 = normalize_points(to_homogeneous_coordinates(kp2))
 
-        vectors_init = torch.cat(((kp1[:, :, :2] + 1) / 2, (kp2[:, :, :2] + 1) / 2, additional_info), 2).permute(0, 2, 1)
+        vectors_init = torch.cat(((kp1[:, :, :2] + 1) / 2, (kp2[:, :, :2] + 1) / 2), 2).permute(0, 2, 1)
         weights = self.weights_init(vectors_init)  # B x N
 
-        F_estimate_init = self.model(kp1, kp2, weights)
+        F_estimate_init = self.estimator(kp1, kp2, weights)
         F_estimates = [F_estimate_init]
 
         for _ in range(1, self.num_iter):
@@ -127,7 +126,7 @@ class NormalizedEightPointNet(nn.Module):
             vectors_iter = torch.cat((vectors_init, weights.unsqueeze(1), residuals), 1)
             weights = self.weights_iter(vectors_iter)
 
-            F_estimate_iter = self.model(kp1, kp2, weights)
+            F_estimate_iter = self.estimator(kp1, kp2, weights)
             F_estimates.append(F_estimate_iter)
 
         return F_estimates, norm_transform1, norm_transform2
@@ -168,13 +167,6 @@ class NetVGG(nn.Module):
         """
         :param x: B x C x H x W
         """
-
-        if self.verbose and torch.cuda.is_available():
-            forward_start_time = torch.cuda.Event(enable_timing=True)
-            forward_end_time = torch.cuda.Event(enable_timing=True)
-
-            forward_start_time.record()
-
         x = self.conv1(x)
         s1 = self.score1(x)
 

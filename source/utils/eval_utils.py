@@ -2,32 +2,27 @@ import torch
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-from sklearn.metrics import f1_score
 
-from source.utils.colmap_utils import compute_residual
 from source.utils.model_utils import sample_descriptors
-
 from source.utils.image_utils import warp_image, get_visible_keypoints_mask, \
     warp_points, select_keypoints
+from source.utils.metric_utils import compute_error
 
 
-def compute_error(kp1, kp2, model_est, model_gt, th=1.0):
-    residuals = compute_residual(kp1, kp2, model_est)
-    residuals_gt = compute_residual(kp1, kp2, model_gt)
+def evaluate(kp1, kp2, F_estimate, F_gt, thresh=1.0):
+    accuracy = 0
+    f1_score = 0
 
-    inl1 = (residuals) <= th
-    inl2 = (residuals_gt) <= th
+    for j in range(kp1.shape[0]):
+        j_a, j_f1 = compute_error(kp1[j], kp2[j], F_estimate[j], F_gt[j], thresh)
 
-    inl = np.sum(inl1 * inl2) / np.sum(inl2)
-    f1 = f1_score(inl2, inl1)
+        accuracy += j_a
+        f1_score += j_f1
 
-    return inl, f1
+    accuracy /= kp1.shape[0]
+    f1_score /= kp1.shape[0]
 
-
-def transform_F_into_image_space(norm_transform1, norm_transform2, F_estimate):
-    F_estimate = norm_transform1.permute(0, 2, 1).bmm(F_estimate.bmm(norm_transform2))
-    F_estimate = F_estimate / F_estimate[:, -1, -1].unsqueeze(-1).unsqueeze(-1)
-    return F_estimate
+    return accuracy, f1_score
 
 
 """
@@ -42,7 +37,6 @@ HOMO21 = 'homo21'
 S_IMAGE1 = 's_image1'
 S_IMAGE2 = 's_image2'
 
-
 KP1 = 'kp1'
 KP2 = 'kp2'
 KP1_DESC = 'kp1_desc'
@@ -55,10 +49,10 @@ WV_KP2_MASK = 'wv_kp2_mask'
 
 def forward(model, batch, device):
     image1, image2, homo12, homo21 = (
-            batch[IMAGE1].to(device),
-            batch[IMAGE2].to(device),
-            batch[HOMO12].to(device),
-            batch[HOMO21].to(device))
+        batch[IMAGE1].to(device),
+        batch[IMAGE2].to(device),
+        batch[HOMO12].to(device),
+        batch[HOMO21].to(device))
 
     output1 = model(image1)
     output2 = model(image2)
@@ -134,7 +128,8 @@ def to_cv2_keypoint(kp):
     """
     :param kp: N x 2
     """
-    kp = kp.detach().cpu().numpy()
+    if torch.is_tensor(kp):
+        kp = kp.detach().cpu().numpy()
     kp = list(map(lambda x: cv2.KeyPoint(x[1], x[0], 0), kp))
 
     return kp

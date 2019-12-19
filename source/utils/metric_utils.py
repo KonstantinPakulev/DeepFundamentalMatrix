@@ -1,4 +1,8 @@
 import torch
+import numpy as np
+from sklearn.metrics import f1_score
+
+from source.utils.colmap_utils import compute_residual
 
 from source.utils.math_utils import calculate_distance_matrix, calculate_inv_similarity_matrix
 
@@ -84,3 +88,16 @@ def match_score(w_kp1, kp2, wv_kp1_mask, wv_kp2_mask, kp_dist_thresholds, kp1_de
         return match_score_list, num_matches_list, num_gt_corrs, nn_desc_ids, kp_matches_list
     else:
         return match_score_list
+
+
+def compute_error(kp1, kp2, F_estimate, F_gt, thresh=1.0):
+    residuals = compute_residual(kp1, kp2, F_estimate)
+    residuals_gt = compute_residual(kp1, kp2, F_gt)
+
+    estimated_inliers = (residuals) <= thresh
+    gt_inliers = (residuals_gt) <= thresh
+
+    accuracy = np.sum(estimated_inliers * gt_inliers) / np.sum(gt_inliers)
+    f1 = f1_score(gt_inliers, estimated_inliers)
+
+    return accuracy, f1

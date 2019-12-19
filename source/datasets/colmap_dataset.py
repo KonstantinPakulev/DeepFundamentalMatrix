@@ -8,17 +8,13 @@ from source.utils.colmap_utils import read_cameras_binary, read_images_binary, \
     compose_fundamental_matrix, compute_residual
 
 
-class ColmapDataset(Dataset):
+class ColmapBinDataset(Dataset):
 
-    def __init__(self, dataset_root, num_min_matches, num_points):
-        self.kp1_list = []
-        self.kp2_list = []
-
-        self.F_list = []
-
-        self.additional_info_list = []
+    def __init__(self, dataset_root, num_min_matches, num_points, length=None):
+        self.dataset = []
 
         self.num_points = num_points
+        self.length = length
 
         cameras = read_cameras_binary(f"{dataset_root}/sparse/0/cameras.bin")
         images = read_images_binary(f"{dataset_root}/sparse/0/images.bin")
@@ -35,83 +31,89 @@ class ColmapDataset(Dataset):
             img2 = images[img2_id]
 
             # Get cameras
-            K1, T1, sz1 = get_camera(img1, cameras)
-            K2, T2, sz2 = get_camera(img2, cameras)
+            K1, T1 = get_camera(img1, cameras)
+            K2, T2 = get_camera(img2, cameras)
 
             F = compose_fundamental_matrix(K1, T1, K2, T2)
 
             matches = np.fromstring(row[1], dtype=np.uint32).reshape(-1, 2)
 
-            cursor2 = connection.cursor()
-            cursor2.execute("SELECT data, cols FROM keypoints WHERE image_id=?;", (img1_id,))
-            row2 = next(cursor2)
-            keypoints1 = np.fromstring(row2[0], dtype=np.float32).reshape(-1, row2[1])
+            inner_cursor = connection.cursor()
+            inner_cursor.execute("SELECT data, cols FROM keypoints WHERE image_id=?;", (img1_id,))
 
-            cursor2.execute("SELECT data, cols FROM keypoints WHERE image_id=?;", (img2_id,))
-            row2 = next(cursor2)
-            keypoints2 = np.fromstring(row2[0], dtype=np.float32).reshape(-1, row2[1])
+            inner_row = next(inner_cursor)
+            kp1 = np.fromstring(inner_row[0], dtype=np.float32).reshape(-1, inner_row[1])
 
-            cursor2.execute("SELECT data FROM descriptors WHERE image_id=?;", (img1_id,))
-            row2 = next(cursor2)
-            descriptor1 = np.float32(np.fromstring(row2[0], dtype=np.uint8).reshape(-1, 128))
+            inner_cursor.execute("SELECT data, cols FROM keypoints WHERE image_id=?;", (img2_id,))
 
-            cursor2.execute("SELECT data FROM descriptors WHERE image_id=?;", (img2_id,))
-            row2 = next(cursor2)
-            descriptor2 = np.float32(np.fromstring(row2[0], dtype=np.uint8).reshape(-1, 128))
+            inner_row = next(inner_cursor)
+            kp2 = np.fromstring(inner_row[0], dtype=np.float32).reshape(-1, inner_row[1])
 
-            angle1 = keypoints1[matches[:, 0], 3]
-            angle2 = keypoints2[matches[:, 1], 3]
+            inner_cursor.execute("SELECT data FROM descriptors WHERE image_id=?;", (img1_id,))
 
-            desc_dist = np.sqrt(np.mean((descriptor1[matches[:, 0]] - descriptor2[matches[:, 1]]) ** 2, 1))[..., None]
-            rel_scale = np.abs(keypoints1[matches[:, 0], 2] - keypoints2[matches[:, 1], 2])[..., None]
+            inner_row = next(inner_cursor)
+            descriptor1 = np.float32(np.fromstring(inner_row[0], dtype=np.uint8).reshape(-1, 128))
+
+            inner_cursor.execute("SELECT data FROM descriptors WHERE image_id=?;", (img2_id,))
+
+            inner_row = next(inner_cursor)
+            descriptor2 = np.float32(np.fromstring(inner_row[0], dtype=np.uint8).reshape(-1, 128))
+
+            kp1 = kp1[matches[:, 0]]
+            kp2 = kp2[matches[:, 1]]
+
+            angle1 = kp1[:, 3]
+            angle2 = kp2[:, 3]
+
+            descriptor1 = descriptor1[matches[:, 0]]
+            descriptor2 = descriptor2[matches[:, 1]]
+
+            desc_dist = np.sqrt(np.mean((descriptor1 - descriptor2) ** 2, 1))[..., None]
+            rel_scale = np.abs(kp1[:, 2] - kp2[:, 2])[..., None]
             rel_orient = np.minimum(np.abs(angle1 - angle2), np.abs(angle2 - angle1))[..., None]
 
             additional_info = np.hstack((desc_dist, rel_scale, rel_orient))
 
-            keypoints1 = keypoints1[matches[:, 0], :2]
-            keypoints2 = keypoints2[matches[:, 1], :2]
+            kp1 = kp1[:, :2]
+            kp2 = kp2[:, :2]
 
-            res = compute_residual(keypoints1, keypoints2, F.T)
+            res = compute_residual(kp1, kp2, F.T)
+            residual_mask = res < 1
 
-            if np.sum(np.uint8(res < 1)) >= num_min_matches:
-                self.kp1_list.append(keypoints1)
-                self.kp2_list.append(keypoints2)
-
-                self.F_list.append(F.T)
-
-                self.additional_info_list.append(additional_info)
+            if np.sum(residual_mask) >= num_min_matches:
+                self.dataset.append([kp1, kp2, F.T, additional_info, residual_mask])
 
         cursor.close()
         connection.close()
 
     def __getitem__(self, idx):
-        kp1 = self.kp1_list[idx]
-        kp2 = self.kp2_list[idx]
+        kp1, kp2, F, additional_info, residual_mask = self.dataset[idx]
 
-        F = self.F_list[idx]
+        if self.num_points is not None:
+            while kp1.shape[0] < self.num_points:
+                perm = np.random.permutation(kp1.shape[0])[:self.num_points - kp1.shape[0]]
 
-        additional_info = self.additional_info_list[idx]
+                kp1 = np.concatenate((kp1, kp1[perm]), 0)
+                kp2 = np.concatenate((kp2, kp2[perm]), 0)
 
-        while kp1.shape[0] < self.num_points:
-            num_missing = self.num_points - kp1.shape[0]
-            perm = np.random.permutation(kp1.shape[0])[:num_missing]
+                additional_info = np.concatenate((additional_info, additional_info[perm]), 0)
+                residual_mask = np.concatenate((residual_mask, residual_mask[perm]), 0)
 
-            kp1 = np.concatenate((kp1, kp1[perm]), 0)
-            kp2 = np.concatenate((kp2, kp2[perm]), 0)
+        additional_info /= np.amax(additional_info, 0)
 
-            additional_info_perm = additional_info[perm]
-            additional_info = np.concatenate((additional_info, additional_info_perm), 0)
+        if self.num_points is not None:
+            if kp1.shape[0] > self.num_points:
+                perm = np.random.permutation(kp1.shape[0])[: self.num_points]
 
-        additional_info /= np.amax(self.additional_info_list[idx], 0)
+                kp1 = kp1[perm]
+                kp2 = kp2[perm]
+                additional_info = additional_info[perm]
+                residual_mask = residual_mask[perm]
 
-        if kp1.shape[0] > self.num_points:
-            perm = np.random.permutation(kp1.shape[0])[: self.num_points]
-
-            kp1 = kp1[perm]
-            kp2 = kp2[perm]
-            additional_info = additional_info[perm]
-
-        return kp1, kp2, F, additional_info
+        return kp1, kp2, F, additional_info, residual_mask
 
     def __len__(self):
-        return len(self.F_list)
+        if self.length is None:
+            return len(self.dataset)
+        else:
+            return self.length

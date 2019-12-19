@@ -57,3 +57,9 @@ def normalize_weighted_points(points, weights):
     points = torch.bmm(points, normalize_transform.permute(0, 2, 1))
 
     return points, normalize_transform
+
+
+def transform_F_to_image_space(norm_transform1, norm_transform2, F_estimate):
+    F_estimate = norm_transform1.permute(0, 2, 1).bmm(F_estimate.bmm(norm_transform2))
+    F_estimate = F_estimate / F_estimate[:, -1, -1].unsqueeze(-1).unsqueeze(-1)
+    return F_estimate

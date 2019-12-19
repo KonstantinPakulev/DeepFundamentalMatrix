@@ -3,8 +3,7 @@ import numpy as np
 import torch
 import torchvision.transforms.functional as F
 
-from source.utils.eval_utils import (IMAGE1_NAME, IMAGE2_NAME,
-                                     IMAGE1, IMAGE2,
+from source.utils.eval_utils import (IMAGE1, IMAGE2,
                                      HOMO12, HOMO21,
                                      S_IMAGE1, S_IMAGE2)
 from source.utils.image_utils import resize_homography

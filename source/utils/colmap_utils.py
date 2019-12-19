@@ -144,12 +144,6 @@ def qvec2rotmat(qvec):
 
 
 def pair_id_to_image_ids(pair_id):
-    """Get image ids from pair id. (Taken from colmap)
-    Args:
-        pair_id (int): image pair id
-    Returns:
-        tuple: id of first image, id of second image
-    """
     image_id2 = pair_id % 2147483647
     image_id1 = (pair_id - image_id2) / 2147483647
 
@@ -157,20 +151,11 @@ def pair_id_to_image_ids(pair_id):
 
 
 def get_camera(img, cams):
-    """Get camera data.
-    Args:
-        img: image data
-        cams: camera data
-    Returns:
-        tuple: intrinsic, extrinsic, image size
-    """
     R = quaternion_to_rotation_matrix(np.asarray(img.qvec))
     t = img.tvec
     camera = cams[int(img.camera_id)]
 
     params = camera.params
-
-    sz = np.array([camera.width, camera.height])
 
     T = np.eye(4)
     T[:3, :3] = R[:3, :3]
@@ -182,19 +167,10 @@ def get_camera(img, cams):
     K[0, 2] = params[1]
     K[1, 2] = params[2]
 
-    return K, T, sz
+    return K, T
 
 
 def compose_fundamental_matrix(K1, T1, K2, T2):
-    """Compose fundamental matrix.
-    Args:
-        K1 (array): intrinsic of 1st camera
-        T1 (array): extrinsic of 1st camera
-        K2 (array): intrinsic of 2nd camera
-        T2 (array): extrinsic of 2nd camera
-    Returns:
-        array: fundamental matrix
-    """
     T12 = T2 @ np.linalg.inv(T1)
 
     R = T12[:3, :3]
@@ -209,14 +185,6 @@ def compose_fundamental_matrix(K1, T1, K2, T2):
 
 
 def compute_residual(pts1, pts2, F):
-    """Compute epipolar residual.
-    Args:
-        pts1 (array): points
-        pts2 (array): points
-        F (array): fundamental matrix
-    Returns:
-        array: residuals
-    """
     pts1 = points_to_homogeneous(pts1)
     pts2 = points_to_homogeneous(pts2)
 
@@ -234,12 +202,6 @@ def compute_residual(pts1, pts2, F):
 
 
 def vector_to_cross(vec):
-    """Compute cross product matrix.
-    Args:
-        vec (array): vector
-    Returns:
-        array: cros product matrix
-    """
     T = np.zeros((3, 3))
 
     T[0, 1] = -vec[2]
@@ -253,25 +215,6 @@ def vector_to_cross(vec):
 
 
 def quaternion_to_rotation_matrix(quaternion):
-    """Get rotation matrix from quaternion.
-    Args:
-        quaternion (array): quaternion
-    Returns:
-        array: rotation matrix
-    """
-
-    #    Return homogeneous rotation matrix from quaternion.
-
-    # >> > M = quaternion_matrix([0.99810947, 0.06146124, 0, 0])
-    # >> > numpy.allclose(M, rotation_matrix(0.123, [1, 0, 0]))
-    # True
-    # >> > M = quaternion_matrix([1, 0, 0, 0])
-    # >> > numpy.allclose(M, numpy.identity(4))
-    # True
-    # >> > M = quaternion_matrix([0, 1, 0, 0])
-    # >> > numpy.allclose(M, numpy.diag([1, -1, -1, 1]))
-    # True
-
     _EPS = np.finfo(float).eps * 4.0
     q = np.array(quaternion, dtype=np.float64, copy=True)
     n = np.dot(q, q)
@@ -291,10 +234,4 @@ def quaternion_to_rotation_matrix(quaternion):
 
 
 def points_to_homogeneous(pts):
-    """Transform points to homogeneous points.
-    Args:
-        pts (array): points
-    Returns:
-        array: homogeneous points
-    """
     return np.concatenate((pts, np.ones((pts.shape[0], 1))), 1)

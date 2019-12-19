@@ -58,7 +58,7 @@ def symmetric_epipolar_distance(kp1, kp2, F):
     :param kp2: B x N x 3; keypoints on the second image in homogeneous coordinates
     :param F: B x 3 x 3; Fundamental matrix connecting first and second image planes
     """
-    epipolar_line1 = torch.bmm(kp1, F) # B x N x 3
+    epipolar_line1 = torch.bmm(kp1, F)  # B x N x 3
     epipolar_line2 = torch.bmm(kp2, F.permute(0, 2, 1))
 
     epipolar_distance = (kp2 * epipolar_line1).sum(dim=2).abs()
