@@ -2,7 +2,7 @@
 To reproduce the results please do the following:
 1) Download South Building dataset from here https://colmap.github.io/datasets.html and convert its data using COLMAP to binary format.
 
-2) Choose the checkpoint you want to use: [checkpoints_sh](checkpoints_sh) or [checkpoints_md](checkpoints_md) the first one is both for visual and qualitative evaluation, but provides slightly worse results. The second one is for qualitative evalution only and will require you to change some code in order to make it work.
+2) Choose the checkpoint you want to use: [checkpoints_sh](checkpoints_sh) or [checkpoints_md](checkpoints_md). The first one is both for visual and qualitative evaluation, but provides slightly worse results. The second one is for qualitative evalution only and will require you to change some code in order to make it work.
 
 3) If you have chosen the first checkpoint and want to qualitative evaluation then simply run [test.sh](test.sh) by providing dataset root and model checkpoint path parameters. 
 If you want to reproduce visual evaluation then download neural network for keypoints detection/description from here https://drive.google.com/open?id=1pKvdfSXs5al3ESbPTQaTf39xAYProvsa. Then open [notebooks/evaluation.ipybn](notebooks/evaluation.ipybn) and provide checkpoint paths for both models (i.e. detection-description network and IRLS-NN).
