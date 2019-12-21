@@ -4,7 +4,7 @@ To reproduce the results please do the following:
 
 2) Choose the checkpoint you want to use: [checkpoints_sh](checkpoints_sh) or [checkpoints_md](checkpoints_md) the first one is both for visual and qualitative evaluation, but provides slightly worse results. The second one is for qualitative evalution only and will require you to change some code in order to make it work.
 
-3) If you have chosen the first checkpoint and want to qualitative evaluation then simply run [test.sh](test.sh) by providing dataset root and model checkpoint path to it. 
+3) If you have chosen the first checkpoint and want to qualitative evaluation then simply run [test.sh](test.sh) by providing dataset root and model checkpoint path parameters. 
 If you want to reproduce visual evaluation then download neural network for keypoints detection/description from here https://drive.google.com/open?id=1pKvdfSXs5al3ESbPTQaTf39xAYProvsa. Then open [notebooks/evaluation.ipybn](notebooks/evaluation.ipybn) and provide checkpoint paths for both models (i.e. detection-description network and IRLS-NN).
 
 4) If you have chosen the second checkpoint, then you only have an option of running a qualitative evaluation. Procedure is the same as for the first checkpoint, however you will need to replace in [source/nn/model.py](source/nn/model.py) the following line 
